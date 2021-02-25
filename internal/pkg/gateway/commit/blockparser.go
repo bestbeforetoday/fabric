@@ -7,54 +7,48 @@ SPDX-License-Identifier: Apache-2.0
 package commit
 
 import (
-	"errors"
-
 	"github.com/golang/protobuf/proto"
-	commonProto "github.com/hyperledger/fabric-protos-go/common"
-	peerProto "github.com/hyperledger/fabric-protos-go/peer"
-	ghErrors "github.com/pkg/errors"
+	"github.com/hyperledger/fabric-protos-go/common"
+	"github.com/hyperledger/fabric-protos-go/peer"
+	"github.com/pkg/errors"
 )
 
-type blockParser struct {
-	Block *commonProto.Block
-}
+func transactionValidationCodes(block *common.Block) (map[string]peer.TxValidationCode, error) {
+	results := make(map[string]peer.TxValidationCode)
 
-func (parser *blockParser) TransactionValidationCodes() (map[string]peerProto.TxValidationCode, error) {
-	results := make(map[string]peerProto.TxValidationCode)
-
-	envelopes := parser.Block.Data.Data
+	envelopes := block.Data.Data
 	for i, envelopeBytes := range envelopes {
 		channelHeader, err := unmarshalChannelHeader(envelopeBytes)
 		if err != nil {
-			return nil, ghErrors.WithMessagef(err, "failed to unmarshal channel header from envelope at index %v in block number %v",
-				i, parser.Block.Header.Number)
+			return nil, errors.WithMessagef(err, "failed to unmarshal channel header from envelope at index %v in block number %v",
+				i, block.Header.Number)
 		}
 
-		validationCode := parser.validationCode(i)
-		if validationCode == peerProto.TxValidationCode_BAD_PROPOSAL_TXID {
+		validationCode := validationCode(block, i)
+		if validationCode == peer.TxValidationCode_BAD_PROPOSAL_TXID {
 			continue
 		}
 
 		if _, exists := results[channelHeader.TxId]; !exists {
-			results[channelHeader.TxId] = parser.validationCode(i)
+			results[channelHeader.TxId] = validationCode
 		}
 	}
 
 	return results, nil
 }
 
-func (parser *blockParser) validationCode(envelopeIndex int) peerProto.TxValidationCode {
-	validationCodes := parser.Block.Metadata.Metadata[int(commonProto.BlockMetadataIndex_TRANSACTIONS_FILTER)]
-	return peerProto.TxValidationCode(validationCodes[envelopeIndex])
+func validationCode(block *common.Block, envelopeIndex int) peer.TxValidationCode {
+	validationCodes := block.Metadata.Metadata[int(common.BlockMetadataIndex_TRANSACTIONS_FILTER)]
+	return peer.TxValidationCode(validationCodes[envelopeIndex])
 }
 
-func unmarshalChannelHeader(envelopeBytes []byte) (*commonProto.ChannelHeader, error) {
-	envelope := &commonProto.Envelope{}
+func unmarshalChannelHeader(envelopeBytes []byte) (*common.ChannelHeader, error) {
+	envelope := &common.Envelope{}
 	if err := proto.Unmarshal(envelopeBytes, envelope); err != nil {
 		return nil, err
 	}
 
-	payload := &commonProto.Payload{}
+	payload := &common.Payload{}
 	if err := proto.Unmarshal(envelope.Payload, payload); err != nil {
 		return nil, err
 	}
@@ -63,7 +57,7 @@ func unmarshalChannelHeader(envelopeBytes []byte) (*commonProto.ChannelHeader, e
 		return nil, errors.New("missing payload header")
 	}
 
-	channelHeader := &commonProto.ChannelHeader{}
+	channelHeader := &common.ChannelHeader{}
 	if err := proto.Unmarshal(payload.Header.ChannelHeader, channelHeader); err != nil {
 		return nil, err
 	}

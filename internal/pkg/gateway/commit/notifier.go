@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package commit
 
 import (
-	commonProto "github.com/hyperledger/fabric-protos-go/common"
-	ordererProto "github.com/hyperledger/fabric-protos-go/orderer"
-	peerProto "github.com/hyperledger/fabric-protos-go/peer"
+	"github.com/hyperledger/fabric-protos-go/common"
+	"github.com/hyperledger/fabric-protos-go/orderer"
+	"github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
 )
 
@@ -26,7 +26,7 @@ func NewNotifier(reader BlockReader) *Notifier {
 }
 
 // Notify the supplied channel when the specified transaction is committed to a channel's ledger.
-func (notifier *Notifier) Notify(channelID string, transactionID string) (<-chan peerProto.TxValidationCode, error) {
+func (notifier *Notifier) Notify(channelID string, transactionID string) (<-chan peer.TxValidationCode, error) {
 	// TODO: add a context parameter to enable the notifier to be cancelled
 	// TODO: pooling of ledger iterators over multiple invocations
 	blockIterator, err := notifier.reader.Iterator(channelID, seekNextCommit())
@@ -34,24 +34,24 @@ func (notifier *Notifier) Notify(channelID string, transactionID string) (<-chan
 		return nil, err
 	}
 
-	commitChannel := make(chan peerProto.TxValidationCode, 1)
+	commitChannel := make(chan peer.TxValidationCode, 1)
 	go readCommit(commitChannel, blockIterator, transactionID)
 
 	return commitChannel, nil
 }
 
-func readCommit(commit chan<- peerProto.TxValidationCode, blockIterator blockledger.Iterator, transactionID string) {
+func readCommit(commit chan<- peer.TxValidationCode, blockIterator blockledger.Iterator, transactionID string) {
 	defer blockIterator.Close()
 	defer close(commit)
 
 	for {
 		block, status := blockIterator.Next()
-		if status != commonProto.Status_SUCCESS {
+		if status != common.Status_SUCCESS {
+			// TODO: log error -- ledger is broken
 			return
 		}
 
-		parser := &blockParser{block}
-		validationCodes, err := parser.TransactionValidationCodes()
+		validationCodes, err := transactionValidationCodes(block)
 		if err != nil {
 			// TODO: log error -- ledger is broken at this point
 			return
@@ -64,10 +64,10 @@ func readCommit(commit chan<- peerProto.TxValidationCode, blockIterator blockled
 	}
 }
 
-func seekNextCommit() *ordererProto.SeekPosition {
-	return &ordererProto.SeekPosition{
-		Type: &ordererProto.SeekPosition_NextCommit{
-			NextCommit: &ordererProto.SeekNextCommit{},
+func seekNextCommit() *orderer.SeekPosition {
+	return &orderer.SeekPosition{
+		Type: &orderer.SeekPosition_NextCommit{
+			NextCommit: &orderer.SeekNextCommit{},
 		},
 	}
 }
@@ -76,5 +76,5 @@ func seekNextCommit() *ordererProto.SeekPosition {
 
 // BlockReader allows blocks to be read from the local peer's ledgers.
 type BlockReader interface {
-	Iterator(channelID string, startType *ordererProto.SeekPosition) (blockledger.Iterator, error)
+	Iterator(channelID string, startType *orderer.SeekPosition) (blockledger.Iterator, error)
 }
