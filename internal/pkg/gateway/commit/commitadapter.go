@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package commit
 
 import (
-	peerproto "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/pkg/errors"
@@ -28,13 +27,32 @@ func (adapter *PeerAdapter) CommitNotifications(done <-chan struct{}, channelNam
 	return channel.Ledger().CommitNotificationsChannel(done)
 }
 
-func (adapter *PeerAdapter) TransactionStatus(channelName string, transactionID string) (peerproto.TxValidationCode, error) {
+func (adapter *PeerAdapter) TransactionStatus(channelName string, transactionID string) (*Status, error) {
 	channel, err := adapter.channel(channelName)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return channel.Ledger().GetTxValidationCodeByTxID(transactionID)
+	ledger := channel.Ledger()
+
+	status, err := ledger.GetTxValidationCodeByTxID(transactionID)
+	if err != nil {
+		return nil, err
+	}
+
+	block, err := ledger.GetBlockByTxID(transactionID)
+	if err != nil {
+		return nil, err
+	}
+	if block.Header == nil {
+		return nil, errors.Errorf("missing header for block containing transaction %s", transactionID)
+	}
+
+	result := &Status{
+		Code:        status,
+		BlockNumber: block.Header.Number,
+	}
+	return result, nil
 }
 
 func (adapter *PeerAdapter) channel(name string) (*peer.Channel, error) {

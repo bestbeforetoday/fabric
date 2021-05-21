@@ -238,13 +238,11 @@ var _ = Describe("GatewayService", func() {
 				Signature: signature,
 			}
 
-			actualStatus, err := gatewayClient.CommitStatus(ctx, signedStatusRequest)
+			status, err := gatewayClient.CommitStatus(ctx, signedStatusRequest)
 			Expect(err).NotTo(HaveOccurred())
 
-			expectedStatus := &gateway.CommitStatusResponse{
-				Result: peer.TxValidationCode_VALID,
-			}
-			Expect(proto.Equal(actualStatus, expectedStatus)).To(BeTrue(), "Expected\n\t%#v\nto proto.Equal\n\t%#v", actualStatus, expectedStatus)
+			Expect(status.Result).To(Equal(peer.TxValidationCode_VALID))
+			Expect(status.BlockNumber).To(BeNumerically(">", 0))
 		})
 
 		It("should fail on unauthorized identity", func() {

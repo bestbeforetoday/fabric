@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/common"
 	gdiscovery "github.com/hyperledger/fabric/gossip/discovery"
+	"github.com/hyperledger/fabric/internal/pkg/gateway/commit"
 	"github.com/hyperledger/fabric/internal/pkg/gateway/config"
 	"github.com/hyperledger/fabric/internal/pkg/gateway/mocks"
 	idmocks "github.com/hyperledger/fabric/internal/pkg/identity/mocks"
@@ -115,7 +116,7 @@ type testDef struct {
 	endorsingOrgs      []string
 	postSetup          func(t *testing.T, def *preparedTest)
 	expectedEndorsers  []string
-	finderStatus       peer.TxValidationCode
+	finderStatus       *commit.Status
 	finderErr          error
 	policyErr          error
 	expectedResponse   proto.Message
@@ -656,34 +657,40 @@ func TestCommitStatus(t *testing.T) {
 			errString: "rpc error: code = FailedPrecondition desc = FINDER_ERROR",
 		},
 		{
-			name:         "returns transaction status",
-			finderStatus: peer.TxValidationCode_MVCC_READ_CONFLICT,
+			name: "returns transaction status",
+			finderStatus: &commit.Status{
+				Code:        peer.TxValidationCode_MVCC_READ_CONFLICT,
+				BlockNumber: 101,
+			},
 			expectedResponse: &pb.CommitStatusResponse{
-				Result: peer.TxValidationCode_MVCC_READ_CONFLICT,
+				Result:      peer.TxValidationCode_MVCC_READ_CONFLICT,
+				BlockNumber: 101,
 			},
 		},
 		{
 			name: "passes channel name to finder",
 			postSetup: func(t *testing.T, test *preparedTest) {
-				test.finder.TransactionStatusCalls(func(ctx context.Context, channelName string, transactionID string) (peer.TxValidationCode, error) {
+				test.finder.TransactionStatusCalls(func(ctx context.Context, channelName string, transactionID string) (*commit.Status, error) {
 					require.Equal(t, testChannel, channelName)
-					return peer.TxValidationCode_MVCC_READ_CONFLICT, nil
+					status := &commit.Status{
+						Code:        peer.TxValidationCode_MVCC_READ_CONFLICT,
+						BlockNumber: 101,
+					}
+					return status, nil
 				})
-			},
-			expectedResponse: &pb.CommitStatusResponse{
-				Result: peer.TxValidationCode_MVCC_READ_CONFLICT,
 			},
 		},
 		{
 			name: "passes transaction ID to finder",
 			postSetup: func(t *testing.T, test *preparedTest) {
-				test.finder.TransactionStatusCalls(func(ctx context.Context, channelName string, transactionID string) (peer.TxValidationCode, error) {
+				test.finder.TransactionStatusCalls(func(ctx context.Context, channelName string, transactionID string) (*commit.Status, error) {
 					require.Equal(t, "TX_ID", transactionID)
-					return peer.TxValidationCode_MVCC_READ_CONFLICT, nil
+					status := &commit.Status{
+						Code:        peer.TxValidationCode_MVCC_READ_CONFLICT,
+						BlockNumber: 101,
+					}
+					return status, nil
 				})
-			},
-			expectedResponse: &pb.CommitStatusResponse{
-				Result: peer.TxValidationCode_MVCC_READ_CONFLICT,
 			},
 		},
 		{
@@ -699,9 +706,9 @@ func TestCommitStatus(t *testing.T) {
 					return nil
 				})
 			},
-			finderStatus: peer.TxValidationCode_MVCC_READ_CONFLICT,
-			expectedResponse: &pb.CommitStatusResponse{
-				Result: peer.TxValidationCode_MVCC_READ_CONFLICT,
+			finderStatus: &commit.Status{
+				Code:        peer.TxValidationCode_MVCC_READ_CONFLICT,
+				BlockNumber: 101,
 			},
 		},
 		{
@@ -715,9 +722,9 @@ func TestCommitStatus(t *testing.T) {
 					return nil
 				})
 			},
-			finderStatus: peer.TxValidationCode_MVCC_READ_CONFLICT,
-			expectedResponse: &pb.CommitStatusResponse{
-				Result: peer.TxValidationCode_MVCC_READ_CONFLICT,
+			finderStatus: &commit.Status{
+				Code:        peer.TxValidationCode_MVCC_READ_CONFLICT,
+				BlockNumber: 101,
 			},
 		},
 	}

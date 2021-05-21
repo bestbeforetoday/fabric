@@ -10,6 +10,7 @@ import (
 
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/internal/pkg/gateway/commit"
 	"github.com/hyperledger/fabric/internal/pkg/gateway/config"
 	"google.golang.org/grpc"
 )
@@ -33,7 +34,7 @@ func (e *EndorserServerAdapter) ProcessProposal(ctx context.Context, req *peer.S
 }
 
 type CommitFinder interface {
-	TransactionStatus(ctx context.Context, channelName string, transactionID string) (peer.TxValidationCode, error)
+	TransactionStatus(ctx context.Context, channelName string, transactionID string) (*commit.Status, error)
 }
 
 type ACLChecker interface {

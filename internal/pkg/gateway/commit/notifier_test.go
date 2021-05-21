@@ -11,34 +11,35 @@ import (
 
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/internal/pkg/gateway/commit/mock"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-//go:generate counterfeiter -o mock/notificationsupplier.go --fake-name NotificationSupplier . notificationSupplier
-type notificationSupplier interface { // Mimic NotificationSupplier to avoid circular import with generated mock
-	NotificationSupplier
-}
+//go:generate mockery --name=NotificationSupplier --inpackage --filename=notificationsupplier_mock_test.go
 
-func newNotificationSupplier(commitSend <-chan *ledger.CommitNotification) *mock.NotificationSupplier {
-	supplier := &mock.NotificationSupplier{}
-	supplier.CommitNotificationsReturnsOnCall(0, commitSend, nil)
-	supplier.CommitNotificationsReturns(nil, errors.New("unexpected call of CommitNotificationChannel"))
+func newNotificationSupplier(commitSends ...<-chan *ledger.CommitNotification) *MockNotificationSupplier {
+	supplier := &MockNotificationSupplier{}
+	for _, commitSend := range commitSends {
+		supplier.On("CommitNotifications", mock.Anything, mock.Anything).
+			Return(commitSend, nil).
+			Once()
+	}
 	return supplier
 }
 
-func TestNotifier(t *testing.T) {
-	newTestNotifier := func(commitSend <-chan *ledger.CommitNotification) *Notifier {
-		supplier := newNotificationSupplier(commitSend)
-		return NewNotifier(supplier)
-	}
+func newTestNotifier(commitSends ...<-chan *ledger.CommitNotification) *Notifier {
+	supplier := newNotificationSupplier(commitSends...)
+	return NewNotifier(supplier)
+}
 
+func TestNotifier(t *testing.T) {
 	t.Run("Notify", func(t *testing.T) {
 		t.Run("returns error from notification supplier", func(t *testing.T) {
-			notificationSupplier := &mock.NotificationSupplier{}
-			notificationSupplier.CommitNotificationsReturns(nil, errors.New("MY_ERROR"))
-			notifier := NewNotifier(notificationSupplier)
+			supplier := &MockNotificationSupplier{}
+			supplier.On("CommitNotifications", mock.Anything, mock.Anything).
+				Return(nil, errors.New("MY_ERROR"))
+			notifier := NewNotifier(supplier)
 			defer notifier.close()
 
 			_, err := notifier.notify(nil, "CHANNEL_NAME", "TX_ID")
@@ -294,16 +295,20 @@ func TestNotifier(t *testing.T) {
 		})
 
 		t.Run("passes open done channel to notification supplier", func(t *testing.T) {
-			notificationSupplier := &mock.NotificationSupplier{}
-			notificationSupplier.CommitNotificationsReturns(nil, nil)
-			notifier := NewNotifier(notificationSupplier)
+			supplier := &MockNotificationSupplier{}
+			supplier.On("CommitNotifications", mock.Anything, mock.Anything).
+				Return(nil, nil).
+				Once()
+
+			notifier := NewNotifier(supplier)
 			defer notifier.close()
 
 			_, err := notifier.notify(nil, "CHANNEL_NAME", "TX_ID")
 			require.NoError(t, err)
 
-			require.Equal(t, 1, notificationSupplier.CommitNotificationsCallCount(), "Unexpected call count")
-			done, _ := notificationSupplier.CommitNotificationsArgsForCall(0)
+			supplier.AssertExpectations(t)
+
+			done := supplier.Calls[0].Arguments.Get(0).(<-chan struct{})
 			select {
 			case <-done:
 				require.FailNow(t, "Expected done channel to be open but was closed")
@@ -312,17 +317,17 @@ func TestNotifier(t *testing.T) {
 		})
 
 		t.Run("passes channel name to notification supplier", func(t *testing.T) {
-			notificationSupplier := &mock.NotificationSupplier{}
-			notificationSupplier.CommitNotificationsReturns(nil, nil)
-			notifier := NewNotifier(notificationSupplier)
+			supplier := &MockNotificationSupplier{}
+			supplier.On("CommitNotifications", mock.Anything, "CHANNEL_NAME").
+				Return(nil, nil).
+				Once()
+			notifier := NewNotifier(supplier)
 			defer notifier.close()
 
 			_, err := notifier.notify(nil, "CHANNEL_NAME", "TX_ID")
 			require.NoError(t, err)
 
-			require.Equal(t, 1, notificationSupplier.CommitNotificationsCallCount(), "Unexpected call count")
-			_, actual := notificationSupplier.CommitNotificationsArgsForCall(0)
-			require.Equal(t, "CHANNEL_NAME", actual)
+			supplier.AssertExpectations(t)
 		})
 
 		t.Run("stops notification if supplier stops", func(t *testing.T) {
@@ -342,10 +347,8 @@ func TestNotifier(t *testing.T) {
 		t.Run("can attach new listener after supplier stops", func(t *testing.T) {
 			commitSend1 := make(chan *ledger.CommitNotification, 1)
 			commitSend2 := make(chan *ledger.CommitNotification, 1)
-			notificationSupplier := &mock.NotificationSupplier{}
-			notificationSupplier.CommitNotificationsReturnsOnCall(0, commitSend1, nil)
-			notificationSupplier.CommitNotificationsReturnsOnCall(1, commitSend2, nil)
-			notifier := NewNotifier(notificationSupplier)
+
+			notifier := newTestNotifier(commitSend1, commitSend2)
 			defer notifier.close()
 
 			commitReceive1, err := notifier.notify(nil, "CHANNEL_NAME", "TX_ID")
@@ -405,16 +408,19 @@ func TestNotifier(t *testing.T) {
 		})
 
 		t.Run("stops notification supplier", func(t *testing.T) {
-			notificationSupplier := &mock.NotificationSupplier{}
-			notificationSupplier.CommitNotificationsReturns(nil, nil)
-			notifier := NewNotifier(notificationSupplier)
+			supplier := &MockNotificationSupplier{}
+			supplier.On("CommitNotifications", mock.Anything, mock.Anything).
+				Return(nil, nil).
+				Once()
+			notifier := NewNotifier(supplier)
 
 			_, err := notifier.notify(nil, "CHANNEL_NAME", "TX_ID")
 			require.NoError(t, err)
 			notifier.close()
 
-			require.Equal(t, 1, notificationSupplier.CommitNotificationsCallCount(), "Unexpected call count")
-			done, _ := notificationSupplier.CommitNotificationsArgsForCall(0)
+			supplier.AssertExpectations(t)
+
+			done := supplier.Calls[0].Arguments.Get(0).(<-chan struct{})
 			_, ok := <-done
 			require.False(t, ok, "Expected notification supplier done channel to be closed but receive was successful")
 		})

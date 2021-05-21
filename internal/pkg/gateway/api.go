@@ -258,9 +258,19 @@ func (gs *Server) CommitStatus(ctx context.Context, signedRequest *gp.SignedComm
 	}
 
 	response := &gp.CommitStatusResponse{
-		Result: txStatus,
+		Result:      txStatus.Code,
+		BlockNumber: txStatus.BlockNumber,
 	}
 	return response, nil
+}
+
+// ChaincodeEvents supplies a stream of responses, each containing all the events emitted by the requested chaincode
+// for a specific block. The streamed responses are ordered by ascending block number. Responses are only returned for
+// blocks that contain the requested events, while blocks not containing any of the requested events are skipped. The
+// events within each response message are presented in the same order that the transactions that emitted them appear
+// within the block.
+func (gs *Server) ChaincodeEvents(signedRequest *gp.SignedChaincodeEventsRequest, stream gp.Gateway_ChaincodeEventsServer) error {
+	return status.Error(codes.Unimplemented, "not implemented")
 }
 
 func endpointError(e *endorser, err error) *gp.EndpointError {
