@@ -13,12 +13,17 @@ import (
 
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/internal/pkg/gateway/commit/mocks"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 //go:generate mockery --name=QueryProvider --inpackage --filename=queryprovider_mock_test.go
+//go:generate counterfeiter -o mocks/queryprovider.go --fake-name QueryProvider . queryProvider
+type queryProvider interface { // Mimic QueryProvider to avoid circular import with generated mock
+	QueryProvider
+}
 
 func TestFinder(t *testing.T) {
 	sendUntilDone := func(commitSend chan<- *ledger.CommitNotification, msg *ledger.CommitNotification) chan struct{} {
@@ -36,6 +41,25 @@ func TestFinder(t *testing.T) {
 
 		return done
 	}
+
+	t.Run("BROKEN - passes channel name to query provider", func(t *testing.T) {
+		provider := mocks.QueryProvider{}
+		status := &Status{
+			Code:        peer.TxValidationCode_MVCC_READ_CONFLICT,
+			BlockNumber: 101,
+		}
+		provider.TransactionStatusReturns(status, nil)
+		finder := &Finder{
+			Query:    provider,
+			Notifier: NewNotifier(newNotificationSupplier(nil)),
+		}
+
+		finder.TransactionStatus(context.Background(), "CHANNEL", "TX_ID")
+
+		require.Equal(t, 1, provider.TransactionStatusCallCount(), "unexpected call count")
+		actual, _ := provider.TransactionStatusArgsForCall(0)
+		require.Equal(t, "CHANNEL", actual)
+	})
 
 	t.Run("passes channel name to query provider", func(t *testing.T) {
 		provider := &MockQueryProvider{}
