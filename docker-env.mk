@@ -21,10 +21,10 @@ ifneq ($(NO_PROXY),)
 DOCKER_BUILD_FLAGS+=--build-arg 'NO_PROXY=$(NO_PROXY)'
 endif
 
-DBUILD = docker build --force-rm $(DOCKER_BUILD_FLAGS)
+DBUILD = docker buildx build --force-rm $(DOCKER_BUILD_FLAGS)
 
 DOCKER_NS ?= hyperledger
-DOCKER_TAG=$(ARCH)-$(PROJECT_VERSION)
+DOCKER_TAG=$(PROJECT_VERSION)
 
 BASE_DOCKER_LABEL=org.hyperledger.fabric
 

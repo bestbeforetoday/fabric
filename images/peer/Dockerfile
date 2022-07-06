@@ -4,6 +4,7 @@
 
 ARG GO_VER
 ARG ALPINE_VER
+ARG ARCH
 
 FROM alpine:${ALPINE_VER} as peer-base
 RUN apk add --no-cache tzdata
@@ -29,12 +30,13 @@ RUN make peer GO_TAGS=${GO_TAGS}
 RUN make ccaasbuilder
 
 FROM peer-base
+ARG ARCH
 ENV FABRIC_CFG_PATH /etc/hyperledger/fabric
 VOLUME /etc/hyperledger/fabric
 VOLUME /var/hyperledger
 COPY --from=peer /go/src/github.com/hyperledger/fabric/build/bin /usr/local/bin
 COPY --from=peer /go/src/github.com/hyperledger/fabric/sampleconfig/msp ${FABRIC_CFG_PATH}/msp
 COPY --from=peer /go/src/github.com/hyperledger/fabric/sampleconfig/core.yaml ${FABRIC_CFG_PATH}/core.yaml
-COPY --from=peer /go/src/github.com/hyperledger/fabric/release/linux-amd64/bin/ccaas_builder/bin/ /opt/hyperledger/ccaas_builder/bin/
+COPY --from=peer /go/src/github.com/hyperledger/fabric/release/linux-${ARCH}/bin/ccaas_builder/bin/ /opt/hyperledger/ccaas_builder/bin/
 EXPOSE 7051
 CMD ["peer","node","start"]
